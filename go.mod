@@ -8,4 +8,5 @@ require (
 	github.com/emersion/go-message v0.12.0
 	github.com/qiniu/iconv v1.2.0
 	github.com/stretchr/testify v1.3.0
+	golang.org/x/net v0.0.0-20200904194848-62affa334b73 // indirect
 )

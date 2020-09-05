@@ -63,22 +63,13 @@ func Parse(r io.Reader) (email Email, err error) {
 func createEmailFromHeader(header mail.Header) (email Email, err error) {
 	hp := headerParser{header: &header}
 
-	CharsetReader := func (label string, input io.Reader) (io.Reader, error) {
-		label = strings.Replace(label, "windows-", "cp", -1)
-		encoding, _ := charset.Lookup(label)
-		return encoding.NewDecoder().Reader(input), nil
-	}
-	dec := mime.WordDecoder{CharsetReader: CharsetReader}
-	from, err := dec.DecodeHeader(header.Get("From"))
-	fmt.Print(from)
-
 	email.Subject = decodeMimeSentence(header.Get("Subject"))
-	email.From = hp.parseAddressList(from)
-	email.Sender = hp.parseAddress(header.Get("Sender"))
-	email.ReplyTo = hp.parseAddressList(header.Get("Reply-To"))
-	email.To = hp.parseAddressList(header.Get("To"))
-	email.Cc = hp.parseAddressList(header.Get("Cc"))
-	email.Bcc = hp.parseAddressList(header.Get("Bcc"))
+	email.From = hp.parseAddressList(decodeHeader(header.Get("From")))
+	email.Sender = hp.parseAddress(decodeHeader(header.Get("Sender")))
+	email.ReplyTo = hp.parseAddressList(decodeHeader(header.Get("Reply-To")))
+	email.To = hp.parseAddressList(decodeHeader(header.Get("To")))
+	email.Cc = hp.parseAddressList(decodeHeader(header.Get("Cc")))
+	email.Bcc = hp.parseAddressList(decodeHeader(header.Get("Bcc")))
 	email.Date = hp.parseTime(header.Get("Date"))
 	email.ResentFrom = hp.parseAddressList(header.Get("Resent-From"))
 	email.ResentSender = hp.parseAddress(header.Get("Resent-Sender"))
@@ -104,6 +95,17 @@ func createEmailFromHeader(header mail.Header) (email Email, err error) {
 	}
 
 	return
+}
+
+func decodeHeader(s string) string {
+	CharsetReader := func (label string, input io.Reader) (io.Reader, error) {
+		label = strings.Replace(label, "windows-", "cp", -1)
+		encoding, _ := charset.Lookup(label)
+		return encoding.NewDecoder().Reader(input), nil
+	}
+	dec := mime.WordDecoder{CharsetReader: CharsetReader}
+	ret, _:= dec.DecodeHeader(s)
+	return ret
 }
 
 func parseContentType(contentTypeHeader string) (contentType string, params map[string]string, err error) {
