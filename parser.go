@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
-	"golang.org/x/net/html/charset"
+	"github.com/emersion/go-message"
 	"io"
 	"io/ioutil"
 	"mime"
@@ -60,16 +60,17 @@ func Parse(r io.Reader) (email Email, err error) {
 	return
 }
 
+
 func createEmailFromHeader(header mail.Header) (email Email, err error) {
 	hp := headerParser{header: &header}
 
 	email.Subject = decodeMimeSentence(header.Get("Subject"))
-	email.From = hp.parseAddressList(decodeHeader(header.Get("From")))
-	email.Sender = hp.parseAddress(decodeHeader(header.Get("Sender")))
-	email.ReplyTo = hp.parseAddressList(decodeHeader(header.Get("Reply-To")))
-	email.To = hp.parseAddressList(decodeHeader(header.Get("To")))
-	email.Cc = hp.parseAddressList(decodeHeader(header.Get("Cc")))
-	email.Bcc = hp.parseAddressList(decodeHeader(header.Get("Bcc")))
+	email.From = hp.parseAddressList(header.Get("From"))
+	email.Sender = hp.parseAddress(header.Get("Sender"))
+	email.ReplyTo = hp.parseAddressList(header.Get("Reply-To"))
+	email.To = hp.parseAddressList(header.Get("To"))
+	email.Cc = hp.parseAddressList(header.Get("Cc"))
+	email.Bcc = hp.parseAddressList(header.Get("Bcc"))
 	email.Date = hp.parseTime(header.Get("Date"))
 	email.ResentFrom = hp.parseAddressList(header.Get("Resent-From"))
 	email.ResentSender = hp.parseAddress(header.Get("Resent-Sender"))
@@ -95,17 +96,6 @@ func createEmailFromHeader(header mail.Header) (email Email, err error) {
 	}
 
 	return
-}
-
-func decodeHeader(s string) string {
-	CharsetReader := func (label string, input io.Reader) (io.Reader, error) {
-		label = strings.Replace(label, "windows-", "cp", -1)
-		encoding, _ := charset.Lookup(label)
-		return encoding.NewDecoder().Reader(input), nil
-	}
-	dec := mime.WordDecoder{CharsetReader: CharsetReader}
-	ret, _:= dec.DecodeHeader(s)
-	return ret
 }
 
 func parseContentType(contentTypeHeader string) (contentType string, params map[string]string, err error) {
@@ -417,21 +407,61 @@ func (hp headerParser) parseAddress(s string) (ma *mail.Address) {
 }
 
 func (hp headerParser) parseAddressList(s string) (ma []*mail.Address) {
-	if hp.err != nil {
-		return
+	parser := mail.AddressParser{
+		&mime.WordDecoder{message.CharsetReader},
+	}
+	list, _ := parser.ParseList(s)
+	//if err != nil {
+	//	return nil
+	//}
+
+	addrs := make([]*mail.Address, len(list))
+	for i, a := range list {
+		addrs[i] = (*mail.Address)(a)
 	}
 
-	if strings.Trim(s, " \n") != "" {
-		ma, hp.err = mail.ParseAddressList(s)
-		if hp.err == nil {
-			for index := range ma {
-				ma[index].Name = decodeMimeSentence(ma[index].Name)
+	// 如果为空
+	if len(addrs) == 0 && strings.Contains(s, "<") && strings.Contains(s,">") {
+		arr := strings.Split(s, ",")
+		for _, item:=range arr {
+			var name string
+			var address string
+			index := strings.Index(item, "<")
+			if index >= 0 && index < len(item) {
+				address = item[index + 1:]
+				name = item[:index]
 			}
+
+			index = strings.Index(address, ">")
+			if index >= 0 && index < len(address) {
+				address = address[:index]
+			}
+
+			addr:=&mail.Address{
+				Name: strings.TrimSpace(name),
+				Address: strings.TrimSpace(address),
+			}
+			addrs = append(addrs, addr)
 		}
-		return
 	}
 
-	return
+
+	return addrs
+	//if hp.err != nil {
+	//	return
+	//}
+	//
+	//if strings.Trim(s, " \n") != "" {
+	//	ma, hp.err = mail.ParseAddressList(s)
+	//	if hp.err == nil {
+	//		for index := range ma {
+	//			ma[index].Name = decodeMimeSentence(ma[index].Name)
+	//		}
+	//	}
+	//	return
+	//}
+	//
+	//return
 }
 
 func (hp headerParser) parseTime(s string) (t time.Time) {
